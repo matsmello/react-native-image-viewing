@@ -7,26 +7,32 @@
  */
 
 import { useEffect, useState } from "react";
-import { Image, ImageURISource } from "react-native";
+import { Image, ImageURISource, Dimensions as RDimensions } from "react-native";
 
 import { createCache } from "../utils";
 import { Dimensions, ImageSource } from "../@types";
 
 const CACHE_SIZE = 50;
 const imageDimensionsCache = createCache(CACHE_SIZE);
+const { width: screenWidth, height: screenHeight } = RDimensions.get("screen");
 
 const useImageDimensions = (image: ImageSource): Dimensions | null => {
   const [dimensions, setDimensions] = useState<Dimensions | null>(null);
 
   const getImageDimensions = (image: ImageSource): Promise<Dimensions> => {
     return new Promise((resolve) => {
+      const { width: originalW, height: originalH } = Image.resolveAssetSource(
+        image
+      );
       if (typeof image == "number") {
         const cacheKey = `${image}`;
         let imageDimensions = imageDimensionsCache.get(cacheKey);
 
         if (!imageDimensions) {
-          const { width, height } = Image.resolveAssetSource(image);
-          imageDimensions = { width, height };
+          imageDimensions = {
+            width: originalW || screenWidth,
+            height: originalH || screenHeight * 0.75,
+          };
           imageDimensionsCache.set(cacheKey, imageDimensions);
         }
 
@@ -44,7 +50,10 @@ const useImageDimensions = (image: ImageSource): Dimensions | null => {
         const imageDimensions = imageDimensionsCache.get(cacheKey);
 
         if (imageDimensions) {
-          resolve(imageDimensions);
+          resolve({
+            width: originalW || screenWidth,
+            height: originalH || screenHeight * 0.75,
+          });
         } else {
           // @ts-ignore
           Image.getSizeWithHeaders(
@@ -52,7 +61,10 @@ const useImageDimensions = (image: ImageSource): Dimensions | null => {
             source.headers,
             (width: number, height: number) => {
               imageDimensionsCache.set(cacheKey, { width, height });
-              resolve({ width, height });
+              resolve({
+                width: width || originalW || screenWidth,
+                height: height || originalH || screenHeight * 0.75,
+              });
             },
             () => {
               resolve({ width: 0, height: 0 });
@@ -70,7 +82,11 @@ const useImageDimensions = (image: ImageSource): Dimensions | null => {
   useEffect(() => {
     getImageDimensions(image).then((dimensions) => {
       if (!isImageUnmounted) {
-        setDimensions(dimensions);
+        let newDimensions =
+          dimensions.height == 0 || dimensions.width == 0
+            ? { height: screenHeight * 0.75, width: screenWidth }
+            : dimensions;
+        setDimensions(newDimensions);
       }
     });
 
